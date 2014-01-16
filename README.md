@@ -39,6 +39,7 @@ In default settings,
 * movie file saved at document directory, named 'TIMESTAMP.mov'
 * 30 FPS
 * shows touch pointer
+* no limitation of the number of files
 
 ###Customize  
 ```objective-c
@@ -49,8 +50,11 @@ In default settings,
     recorder.autosaveDuration = 1800; // 30 minutes
     recorder.showsTouchPointer = NO; // hidden touch pointer
     recorder.filenameBlock = ^(void) {
-        return @"screencast.mov";
-    }; // change filename
+        return @"screencast";
+    }; // change filename (appends 'mov' extension automatically)
+    recorder.directoryPath = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES)[0] 
+                              stringByAppendingPathComponent:@"directory.you.like.to.save"]; // change directory
+    recorder.maxNumberOfFiles = 20; // limit the number of files with 'mov' extension up to 20
     
     [recorder startRecording];
     

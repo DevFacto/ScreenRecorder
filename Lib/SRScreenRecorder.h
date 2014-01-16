@@ -18,6 +18,8 @@ typedef NSString *(^SRScreenRecorderOutputFilenameBlock)();
 @property (assign, nonatomic) NSUInteger autosaveDuration; // in second, default value is 600 (10 minutes).
 @property (assign, nonatomic) BOOL showsTouchPointer;
 @property (copy, nonatomic) SRScreenRecorderOutputFilenameBlock filenameBlock;
+@property (copy, nonatomic) NSString *directoryPath;
+@property (assign, nonatomic) NSUInteger maxNumberOfFiles;
 
 + (SRScreenRecorder *)sharedInstance;
 - (void)startRecording;

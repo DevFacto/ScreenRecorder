@@ -6,6 +6,7 @@
 //  Copyright (c) 2012年 kishikawa katsumi. All rights reserved.
 //
 
+#import <sys/xattr.h>
 #import "SRScreenRecorder.h"
 #import "KTouchPointerWindow.h"
 
@@ -184,6 +185,8 @@ CVReturn CVPixelBufferCreateWithIOSurface(
                            [self restartRecordingIfNeeded];
                        }
                    });
+    
+    [self limitNumberOfFiles];
 }
 
 - (void)restartRecordingIfNeeded
@@ -364,12 +367,12 @@ CVReturn CVPixelBufferCreateWithIOSurface(
     time_t timer;
     time(&timer);
     NSString *timestamp = [NSString stringWithFormat:@"%ld", timer];
-    return [NSString stringWithFormat:@"%@.mov", timestamp];
+    return timestamp;
 }
 
 - (BOOL)existsFile:(NSString *)filename
 {
-    NSString *path = [self.documentDirectory stringByAppendingPathComponent:filename];
+    NSString *path = [[self directoryPathForSave] stringByAppendingPathComponent:filename];
     NSFileManager *fileManager = [[NSFileManager alloc] init];
     BOOL isDirectory;
     return [fileManager fileExistsAtPath:path isDirectory:&isDirectory] && !isDirectory;
@@ -400,12 +403,90 @@ CVReturn CVPixelBufferCreateWithIOSurface(
     }
     
     NSString *filename = self.filenameBlock();
+    filename = [filename stringByAppendingPathExtension:@"mov"];
     if ([self existsFile:filename]) {
         filename = [self nextFilename:filename];
     }
     
-    NSString *path = [self.documentDirectory stringByAppendingPathComponent:filename];
+    NSString *path = [[self directoryPathForSave] stringByAppendingPathComponent:filename];
     return [NSURL fileURLWithPath:path];
+}
+
+- (NSString *)directoryPathForSave
+{
+    NSString *path = nil;
+    if (self.directoryPath.length > 0) {
+        if (![[NSFileManager defaultManager] fileExistsAtPath:self.directoryPath]) {
+            BOOL success = [[NSFileManager defaultManager] createDirectoryAtPath:self.directoryPath
+                                                     withIntermediateDirectories:YES
+                                                                      attributes:nil
+                                                                           error:nil];
+            if (success) {
+                [self addSkipBackupAttributeAtPath:self.directoryPath];
+                path = self.directoryPath;
+            }
+        } else {
+            path = self.directoryPath;
+        }
+    }
+    if (!path) {
+        path = self.documentDirectory;
+    }
+    return path;
+}
+
+- (BOOL)addSkipBackupAttributeAtPath:(NSString *)path
+{
+    if ([[[UIDevice currentDevice] systemVersion] compare:@"5.0.1" options:NSNumericSearch] != NSOrderedDescending) {
+        // iOS <= 5.0.1
+        const char *filePath = [path fileSystemRepresentation];
+        const char *attrName = "com.apple.MobileBackup";
+        u_int8_t attrValue = 1;
+        
+        int result = setxattr(filePath, attrName, &attrValue, sizeof(attrValue), 0, 0);
+        return result == 0;
+    } else {
+        // iOS >= 5.1
+        NSURL *URL = [NSURL fileURLWithPath:path];
+        BOOL result = [URL setResourceValue:[NSNumber numberWithBool:YES]
+                                     forKey:@"NSURLIsExcludedFromBackupKey"
+                                      error:nil];
+        return result;
+    }
+}
+
+- (void)limitNumberOfFiles
+{
+    if (self.maxNumberOfFiles == 0) {
+        return;
+    }
+    
+    NSString *dirPath = [self directoryPathForSave];
+    NSError *error = nil;
+    NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:[self directoryPathForSave] error:&error];
+    if (!error) {
+        NSMutableArray *attributes = [NSMutableArray array];
+        for (NSString *file in list) {
+            NSMutableDictionary *dic = [NSMutableDictionary dictionary];
+            NSString *filePath = [dirPath stringByAppendingPathComponent:file];
+            NSDictionary *attr = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:nil];
+            if ([[filePath pathExtension] isEqualToString:@"mov"] && [attr objectForKey:NSFileType] == NSFileTypeRegular) {
+                [dic setDictionary:attr];
+                [dic setObject:filePath forKey:@"FilePath"];
+                [attributes addObject:dic];
+            }
+        }
+        
+        NSSortDescriptor *sortDescriptor = [[NSSortDescriptor alloc] initWithKey:NSFileCreationDate ascending:YES];
+        NSArray *descArray = [NSArray arrayWithObject:sortDescriptor];
+        NSArray *sortedArray = [attributes sortedArrayUsingDescriptors:descArray];
+        
+        if (sortedArray.count > self.maxNumberOfFiles) {
+            for (int i = 0; i < sortedArray.count - self.maxNumberOfFiles; i++) {
+                [[NSFileManager defaultManager] removeItemAtPath:attributes[i][@"FilePath"] error:nil];
+            }
+        }
+    }
 }
 
 @end
