@@ -21,6 +21,6 @@ typedef NSString *(^SRScreenRecorderOutputFilenameBlock)();
 
 + (SRScreenRecorder *)sharedInstance;
 - (void)startRecording;
-- (void)stopRecording;
+- (NSURL *)stopRecording;
 
 @end

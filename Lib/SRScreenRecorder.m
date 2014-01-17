@@ -83,7 +83,9 @@ CVReturn CVPixelBufferCreateWithIOSurface(
 - (void)dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [self stopRecording];
+    [self stopRecordingWithCompletionHandler:^(NSURL *url) {
+        ;
+    }];
 }
 
 #pragma mark Setup
@@ -157,13 +159,31 @@ CVReturn CVPixelBufferCreateWithIOSurface(
     [self setupTimer];
 }
 
-- (void)stopRecording
+- (NSURL *)stopRecording
+{
+    __block NSURL *url = nil;
+    __block BOOL finished = NO;
+    
+    [self stopRecordingWithCompletionHandler:^(NSURL *saveUrl) {
+        url = saveUrl;
+        finished = YES;
+    }];
+    
+    while (!finished) {
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
+    }
+    
+    return url;
+}
+
+- (void)stopRecordingWithCompletionHandler:(void (^)(NSURL *saveUrl))completionHandler
 {
     [self.displayLink invalidate];
     startTimestamp = 0.0;
     
     dispatch_async(queue, ^
                    {
+                       NSURL *url = self.writer.outputURL;
                        if (self.writer.status != AVAssetWriterStatusCompleted && self.writer.status != AVAssetWriterStatusUnknown) {
                            [self.writerInput markAsFinished];
                        }
@@ -172,12 +192,14 @@ CVReturn CVPixelBufferCreateWithIOSurface(
                             {
                                 [self finishBackgroundTask];
                                 [self restartRecordingIfNeeded];
+                                completionHandler(url);
                             }];
                        } else {
                            [self.writer finishWriting];
                            
                            [self finishBackgroundTask];
                            [self restartRecordingIfNeeded];
+                           completionHandler(url);
                        }
                    });
 }
@@ -201,7 +223,9 @@ CVReturn CVPixelBufferCreateWithIOSurface(
     shouldRestart = YES;
     dispatch_async(queue, ^
                    {
-                       [self stopRecording];
+                       [self stopRecordingWithCompletionHandler:^(NSURL *url) {
+                           ;
+                       }];
                    });
 }
 
@@ -253,7 +277,9 @@ CVReturn CVPixelBufferCreateWithIOSurface(
                                CMTime presentTime =  CMTimeMake(elapsedTime * TIME_SCALE, TIME_SCALE);
                                
                                if(![self.writerInputPixelBufferAdaptor appendPixelBuffer:buffer withPresentationTime:presentTime]) {
-                                   [self stopRecording];
+                                   [self stopRecordingWithCompletionHandler:^(NSURL *url) {
+                                       ;
+                                   }];
                                }
                                
                                CVPixelBufferRelease(buffer);
@@ -329,7 +355,9 @@ CVReturn CVPixelBufferCreateWithIOSurface(
         }];
     }
     
-    [self stopRecording];
+    [self stopRecordingWithCompletionHandler:^(NSURL *url) {
+        ;
+    }];
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification
