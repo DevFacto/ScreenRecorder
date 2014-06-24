@@ -70,6 +70,7 @@ CVReturn CVPixelBufferCreateWithIOSurface(
         _frameInterval = DEFAULT_FRAME_INTERVAL;
         _autosaveDuration = DEFAULT_AUTOSAVE_DURATION;
         _showsTouchPointer = YES;
+        _recording = NO;
         
         counter++;
         NSString *label = [NSString stringWithFormat:@"com.kishikawakatsumi.screen_recorder-%d", counter];
@@ -150,6 +151,8 @@ CVReturn CVPixelBufferCreateWithIOSurface(
 
 - (void)startRecording
 {
+    self.recording = YES;
+    
     [self setupAssetWriterWithURL:[self outputFileURL]];
     
     [self setupTouchPointer];
@@ -159,27 +162,30 @@ CVReturn CVPixelBufferCreateWithIOSurface(
 
 - (void)stopRecording
 {
-    [self.displayLink invalidate];
-    startTimestamp = 0.0;
-    
-    dispatch_async(queue, ^
-                   {
-                       if (self.writer.status != AVAssetWriterStatusCompleted && self.writer.status != AVAssetWriterStatusUnknown) {
-                           [self.writerInput markAsFinished];
-                       }
-                       if ([self.writer respondsToSelector:@selector(finishWritingWithCompletionHandler:)]) {
-                           [self.writer finishWritingWithCompletionHandler:^
-                            {
-                                [self finishBackgroundTask];
-                                [self restartRecordingIfNeeded];
-                            }];
-                       } else {
-                           [self.writer finishWriting];
-                           
-                           [self finishBackgroundTask];
-                           [self restartRecordingIfNeeded];
-                       }
-                   });
+    if (self.recording) {
+        self.recording = NO;
+        [self.displayLink invalidate];
+        startTimestamp = 0.0;
+        
+        dispatch_async(queue, ^
+                       {
+                           if (self.writer.status != AVAssetWriterStatusCompleted && self.writer.status != AVAssetWriterStatusUnknown) {
+                               [self.writerInput markAsFinished];
+                           }
+                           if ([self.writer respondsToSelector:@selector(finishWritingWithCompletionHandler:)]) {
+                               [self.writer finishWritingWithCompletionHandler:^
+                                {
+                                    [self finishBackgroundTask];
+                                    [self restartRecordingIfNeeded];
+                                }];
+                           } else {
+                               [self.writer finishWriting];
+                               
+                               [self finishBackgroundTask];
+                               [self restartRecordingIfNeeded];
+                           }
+                       });
+    }
 }
 
 - (void)restartRecordingIfNeeded
